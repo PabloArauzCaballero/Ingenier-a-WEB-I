@@ -213,11 +213,12 @@ FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 -- =========================
 -- REPORTES (polimórfico)
 -- =========================
+CREATE SCHEMA IF NOT EXISTS revison;
 CREATE TABLE revision.reportes (
   report_id     BIGSERIAL PRIMARY KEY,
   target_tipo   VARCHAR(20) NOT NULL,  -- campana|comentario|usuario
   target_id     BIGINT NOT NULL,
-  reporter_id   BIGINT NOT NULL REFERENCES usuarios(user_id),
+  reporter_id   BIGINT NOT NULL REFERENCES usuarios.usuarios(user_id),
   motivo        VARCHAR(160),
   estado        VARCHAR(20) NOT NULL DEFAULT 'pendiente',
   resuelto_por  BIGINT REFERENCES usuarios(user_id),
@@ -230,14 +231,14 @@ CREATE TABLE revision.reportes (
     CHECK (estado IN ('pendiente','en_revision','resuelto','descartado'))
 );
 
-CREATE INDEX reportes_target_idx ON reportes (target_tipo, target_id);
+CREATE INDEX reportes_target_idx ON revision.reportes (target_tipo, target_id);
 
 -- =========================
 -- REWARD TIERS
 -- =========================
-CREATE TABLE reward_tiers (
+CREATE TABLE campanas.reward_tiers (
   reward_tier_id  BIGSERIAL PRIMARY KEY,
-  campaign_id     BIGINT NOT NULL REFERENCES campanas(campaign_id) ON DELETE CASCADE,
+  campaign_id     BIGINT NOT NULL REFERENCES campanas.campanas(campaign_id) ON DELETE CASCADE,
   titulo          VARCHAR(120) NOT NULL,
   descripcion     TEXT,
   monto_minimo    NUMERIC(18,2) NOT NULL CHECK (monto_minimo > 0),
@@ -257,11 +258,11 @@ CREATE INDEX reward_tiers_campaign_idx ON reward_tiers (campaign_id);
 -- =========================
 -- PLEDGES
 -- =========================
-CREATE TABLE pledges (
+CREATE TABLE campanas.pledges (
   pledge_id      BIGSERIAL PRIMARY KEY,
-  campaign_id    BIGINT NOT NULL REFERENCES campanas(campaign_id),
-  donante_id     BIGINT NOT NULL REFERENCES usuarios(user_id),
-  reward_tier_id BIGINT REFERENCES reward_tiers(reward_tier_id),
+  campaign_id    BIGINT NOT NULL REFERENCES campanas.campanas(campaign_id),
+  donante_id     BIGINT NOT NULL REFERENCES usuarios.usuarios(user_id),
+  reward_tier_id BIGINT REFERENCES campanas.reward_tiers(reward_tier_id),
   monto          NUMERIC(18,2) NOT NULL CHECK (monto > 0),
   moneda         VARCHAR(3) NOT NULL,
   anonima        BOOLEAN DEFAULT FALSE,
@@ -280,7 +281,8 @@ CREATE INDEX pledges_estado_idx ON pledges (estado);
 -- =========================
 -- PAGOS
 -- =========================
-CREATE TABLE pagos (
+CREATE SCHEMA IF NOT EXISTS contabilidad;
+CREATE TABLE contabilidad.pagos (
   payment_id     BIGSERIAL PRIMARY KEY,
   pledge_id      BIGINT NOT NULL UNIQUE REFERENCES pledges(pledge_id) ON DELETE CASCADE,
   metodo_pago    VARCHAR(40) NOT NULL, -- tarjeta|transferencia|wallet|...
