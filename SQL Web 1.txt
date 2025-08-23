@@ -49,6 +49,25 @@ BEFORE UPDATE ON usuarios.usuarios
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 
+CREATE TABLE usuarios.cuentas_bancarias (
+  bank_account_id   BIGSERIAL PRIMARY KEY,
+  user_id           BIGINT NOT NULL REFERENCES usuarios.usuarios(user_id),
+  titular           VARCHAR(120) NOT NULL,
+  banco             VARCHAR(120),
+  account_alias     VARCHAR(80),              
+  account_number_masked VARCHAR(30) NOT NULL, 
+  tipo              VARCHAR(30),              
+  moneda            VARCHAR(3) NOT NULL,      
+  created_at        TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMP NOT NULL DEFAULT NOW(),
+  id_version        int default 1
+);
+
+DROP TRIGGER IF EXISTS trg_usuarios_cuentas_bancarias ON usuarios;
+CREATE TRIGGER trg_usuarios_cuentas_bancarias
+BEFORE UPDATE ON usuarios.cuentas_bancarias
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 -- =========================
 -- USUARIOS PERSONA NATURAL
 -- =========================
@@ -147,6 +166,8 @@ CREATE INDEX campanas_estado_idx ON campanas.campanas (estado);
 CREATE INDEX campanas_pais_ciudad_idx ON campanas.campanas (pais, ciudad);
 CREATE INDEX campanas_published_idx ON campanas.campanas (published_at);
 
+
+
 -- =========================
 -- APROBACIONES
 -- =========================
@@ -206,6 +227,13 @@ CREATE INDEX comentarios_campaign_idx ON campanas.comentarios (campaign_id);
 CREATE INDEX comentarios_autor_idx ON campanas_comentarios.comentarios (autor_id);
 
 
+
+--- ===========================================================================
+--- ===========================================================================
+-------- FALTA LO DE version y update en las tablas de aqui en adelante 
+--- ===========================================================================
+--- ===========================================================================
+
 DROP TRIGGER IF EXISTS trg_campanas_comentarios ON campanas;
 CREATE TRIGGER trg_campanas_comentarios
 BEFORE UPDATE ON campanas.campanas_comentarios
@@ -253,7 +281,7 @@ CREATE TABLE campanas.reward_tiers (
     CHECK (stock_reservado >= 0 AND (stock_total IS NULL OR stock_reservado <= stock_total))
 );
 
-CREATE INDEX reward_tiers_campaign_idx ON reward_tiers (campaign_id);
+CREATE INDEX reward_tiers_campaign_idx ON campanas.reward_tiers (campaign_id);
 
 -- =========================
 -- PLEDGES
@@ -274,9 +302,9 @@ CREATE TABLE campanas.pledges (
     CHECK (estado IN ('iniciada','pagada','fallida','reembolsada','cancelada'))
 );
 
-CREATE INDEX pledges_campaign_idx ON pledges (campaign_id);
-CREATE INDEX pledges_donante_idx ON pledges (donante_id);
-CREATE INDEX pledges_estado_idx ON pledges (estado);
+CREATE INDEX pledges_campaign_idx ON campanas.pledges (campaign_id);
+CREATE INDEX pledges_donante_idx ON campanas.pledges (donante_id);
+CREATE INDEX pledges_estado_idx ON campanas.pledges (estado);
 
 -- =========================
 -- PAGOS
@@ -284,7 +312,7 @@ CREATE INDEX pledges_estado_idx ON pledges (estado);
 CREATE SCHEMA IF NOT EXISTS contabilidad;
 CREATE TABLE contabilidad.pagos (
   payment_id     BIGSERIAL PRIMARY KEY,
-  pledge_id      BIGINT NOT NULL UNIQUE REFERENCES pledges(pledge_id) ON DELETE CASCADE,
+  pledge_id      BIGINT NOT NULL UNIQUE REFERENCES campanas.pledges(pledge_id) ON DELETE CASCADE,
   metodo_pago    VARCHAR(40) NOT NULL, -- tarjeta|transferencia|wallet|...
   estado         VARCHAR(20) NOT NULL, -- autorizado|capturado|fallido|reembolsado|chargeback
   monto_bruto    NUMERIC(18,2) NOT NULL,
@@ -316,7 +344,7 @@ CREATE INDEX pagos_capturado_idx ON pagos (capturado_at);
 -- =========================
 -- PAYOUT BATCHES
 -- =========================
-CREATE TABLE payout_batches (
+CREATE TABLE contabilidad.payout_batches (
   batch_id    BIGSERIAL PRIMARY KEY,
   moneda      VARCHAR(3) NOT NULL,
   estado      VARCHAR(20) NOT NULL DEFAULT 'abierto', -- abierto|enviado|cerrado
@@ -330,12 +358,12 @@ CREATE TABLE payout_batches (
 -- =========================
 -- DESEMBOLSOS
 -- =========================
-CREATE TABLE desembolsos (
+CREATE TABLE contabilidad.desembolsos (
   payout_id        BIGSERIAL PRIMARY KEY,
-  campaign_id      BIGINT NOT NULL REFERENCES campanas(campaign_id),
-  beneficiario_id  BIGINT NOT NULL REFERENCES usuarios(user_id),
-  bank_account_id  BIGINT NOT NULL REFERENCES cuentas_bancarias(bank_account_id),
-  batch_id         BIGINT REFERENCES payout_batches(batch_id),
+  campaign_id      BIGINT NOT NULL REFERENCES campanas.campanas(campaign_id),
+  beneficiario_id  BIGINT NOT NULL REFERENCES usuarios.usuarios(user_id),
+  bank_account_id  BIGINT NOT NULL REFERENCES usuarios.cuentas_bancarias(bank_account_id),
+  batch_id         BIGINT REFERENCES contabilidad.payout_batches(batch_id),
   monto_bruto      NUMERIC(18,2) NOT NULL CHECK (monto_bruto > 0),
   tarifa_transferencia NUMERIC(18,2) NOT NULL DEFAULT 0,
   monto_neto       NUMERIC(18,2) GENERATED ALWAYS AS (monto_bruto - tarifa_transferencia) STORED,
@@ -408,3 +436,4 @@ CREATE TABLE app_superusers (
 
 CREATE INDEX app_superusers_idx_vigencia
   ON app_superusers (is_revoked, expires_at);
+
