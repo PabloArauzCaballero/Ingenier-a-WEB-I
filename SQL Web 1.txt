@@ -1,0 +1,408 @@
+-- Extensión requerida para CITEXT
+CREATE EXTENSION IF NOT EXISTS citext;
+CREATE TABLE archivos (
+  file_id       BIGSERIAL PRIMARY KEY,
+  tipo          VARCHAR(40) NOT NULL,
+  storage_url   TEXT NOT NULL,
+  mime_type     VARCHAR(100),
+  size_in_bytes BIGINT,
+  estado        VARCHAR(20) NOT NULL DEFAULT 'activo', 
+  created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+  CONSTRAINT chk_tipo
+    CHECK (tipo in ('doc_campana', 'portada', 'imagen', 'video')),
+  CONSTRAINT chk_estado
+    CHECK (estado in ('activo', 'eliminado'))
+);
+
+
+-- =========================
+-- USUARIOS (BASE)
+-- =========================
+CREATE SCHEMA IF NOT EXISTS usuarios;
+
+CREATE TABLE usuarios.usuarios (
+  user_id              BIGSERIAL PRIMARY KEY,
+  email                CITEXT UNIQUE NOT NULL,
+  telefono             VARCHAR(30),
+  password_hash        TEXT NOT NULL,
+  estado               VARCHAR(20) NOT NULL DEFAULT 'activo' CHECK (estado IN ('activo', 'suspendido', 'cerrado')), 
+  pais                 VARCHAR(20),
+  puede_crear_campanas BOOLEAN NOT NULL DEFAULT FALSE,
+  ultimo_login_at      TIMESTAMPTZ,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  id_version           INT default 1
+);
+
+-- Trigger para mantener updated_at
+CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at := now();
+  NEW.id_version := COALESCE(OLD.id_version, 1) + 1;
+  RETURN NEW;
+END; $$;
+
+
+DROP TRIGGER IF EXISTS trg_usuarios_updated_at ON usuarios;
+CREATE TRIGGER trg_usuarios_updated_at
+BEFORE UPDATE ON usuarios.usuarios
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+
+-- =========================
+-- USUARIOS PERSONA NATURAL
+-- =========================
+CREATE TABLE usuarios.usuarios_persona_natural (
+  user_id             BIGINT PRIMARY KEY REFERENCES usuarios.usuarios(user_id) ON DELETE CASCADE,
+  nombre              VARCHAR(80) NOT NULL,
+  apellido            VARCHAR(80) NOT NULL,
+  fecha_nacimiento    DATE,
+  direccion_linea1    VARCHAR(200),
+  ciudad              VARCHAR(80),
+  estado_provincia    VARCHAR(80),
+  codigo_postal       VARCHAR(20)
+);
+
+-- =========================
+-- USUARIOS EMPRESA
+-- =========================
+CREATE TABLE usuarios.usuarios_empresa (
+  user_id            BIGINT PRIMARY KEY REFERENCES usuarios.usuarios(user_id) ON DELETE CASCADE,
+  razon_social       VARCHAR(160) NOT NULL,
+  registro_mercantil VARCHAR(60),
+  direccion_fiscal   VARCHAR(200)
+);
+
+-- =========================
+-- BENEFICIAL OWNERS
+-- =========================
+CREATE TABLE usuarios.beneficial_owners (
+  bo_id                     BIGSERIAL PRIMARY KEY,
+
+  empresa_id                BIGINT NOT NULL REFERENCES usuarios.usuarios_empresa(user_id) ON DELETE CASCADE,
+  persona_id                BIGINT NOT NULL REFERENCES usuarios.usuarios_persona_natural(user_id) ON DELETE CASCADE,
+
+  porcentaje_participacion  NUMERIC(5,2)
+    CHECK (porcentaje_participacion > 0 AND porcentaje_participacion <= 100),
+
+  tipo_control              VARCHAR(20) NOT NULL,
+
+  CONSTRAINT uq_bo_empresa_persona UNIQUE (empresa_id, persona_id),
+  CONSTRAINT bo_ck_tipo_control
+    CHECK (tipo_control IN ('directo','indirecto','rep_legal'))
+);
+
+-- =========================
+-- CAMPANAS
+-- =========================
+DROP SCHEMA campanas cascade;
+CREATE SCHEMA IF NOT EXISTS CAMPANAS;
+
+CREATE TABLE campanas.campanas (
+  campaign_id            BIGSERIAL PRIMARY KEY,
+  titulo                 VARCHAR(160) NOT NULL,
+  descripcion_corta      VARCHAR(300),
+  descripcion_larga      TEXT,
+  usuario_solicitante_id BIGINT NOT NULL REFERENCES usuarios(user_id),
+  beneficiario_id        BIGINT REFERENCES usuarios(user_id),
+  monto_solicitado       NUMERIC(18,2) NOT NULL CHECK (monto_solicitado > 0),
+  moneda                 VARCHAR(3) NOT NULL,
+  fecha_limite           DATE NOT NULL,
+  categoria              VARCHAR(80),
+  pais                   VARCHAR(20),
+  ciudad                 VARCHAR(80),
+  metodo_financiamiento  VARCHAR(20) NOT NULL DEFAULT 'all_or_nothing', 
+  tipo_campana           VARCHAR(20) NOT NULL DEFAULT 'donacion',        
+  finalidad_fondos       VARCHAR(400),
+  video_url              TEXT,
+  portada_file_id        BIGINT REFERENCES archivos(file_id),
+  estado                 VARCHAR(20) NOT NULL DEFAULT 'borrador',       
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  published_at           TIMESTAMPTZ,
+  updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  id_version             INT default 1,
+
+  CONSTRAINT campanas_ck_metodo_financiamiento
+    CHECK (metodo_financiamiento IN ('all_or_nothing','flexible')),
+  CONSTRAINT campanas_ck_tipo_campana
+    CHECK (tipo_campana IN ('donacion','recompensa','prestamo','equity')),
+  CONSTRAINT campanas_ck_estado
+    CHECK (estado IN ('borrador','en_revision','aprobada','rechazada','publicada','pausada','finalizada','cancelada'))
+);
+
+CREATE TABLE campanas.camapanas_x_archivos(
+    campaign_id BIGINT REFERENCES campanas.campanas(campaign_id),
+    file_id     BIGINT REFERENCES archivos(file_id),
+    CONSTRAINT pk_campanas_x_archivos PRIMARY KEY (campaign_id, file_id)
+);
+
+DROP TRIGGER IF EXISTS trg_campanas_updated_at ON campanas;
+CREATE TRIGGER trg_campanas_updated_at
+BEFORE UPDATE ON campanas.campanas
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Índices útiles (no cambian columnas)
+CREATE INDEX campanas_solicitante_idx ON campanas.campanas (usuario_solicitante_id);
+CREATE INDEX campanas_estado_idx ON campanas.campanas (estado);
+CREATE INDEX campanas_pais_ciudad_idx ON campanas.campanas (pais, ciudad);
+CREATE INDEX campanas_published_idx ON campanas.campanas (published_at);
+
+-- =========================
+-- APROBACIONES
+-- =========================
+CREATE TABLE campanas.campana_aprobaciones (
+  campaign_approval_id BIGSERIAL PRIMARY KEY,
+  campaign_id          BIGINT NOT NULL REFERENCES campanas.campanas(campaign_id),
+  aprobador_id         BIGINT NOT NULL REFERENCES usuarios.usuarios(user_id),
+  decision             VARCHAR(20) NOT NULL,
+  motivo               TEXT,
+  revision_notes       TEXT,
+  decidida_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT camp_aprob_ck_decision
+    CHECK (decision IN ('aprobada','rechazada'))
+);
+
+-- NO SE VERSIONA APROBACIONES PORQUE SON INMUTABLES -> POR SEGURIDAD DEBEN SER ELIMINADAS PARA LUEGO SER CREADAS DENUEVO.
+
+CREATE UNIQUE INDEX campana_aprobaciones_unq ON campanas.campana_aprobaciones (campaign_id, version);
+
+-- =========================
+-- UPDATES Y COMENTARIOS
+-- =========================
+CREATE TABLE campanas.campaign_updates (
+  campaign_update_id BIGSERIAL PRIMARY KEY,
+  campaign_id        BIGINT NOT NULL REFERENCES campanas.campanas(campaign_id) ON DELETE CASCADE,
+  autor_id           BIGINT NOT NULL REFERENCES usuarios.usuarios(user_id),
+  contenido          TEXT NOT NULL,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ,
+  id_version         INT DEFAULT 1
+);
+
+CREATE INDEX campaign_updates_campaign_idx ON campaign_updates (campaign_id);
+CREATE INDEX campaign_updates_autor_idx ON campaign_updates (autor_id);
+
+DROP TRIGGER IF EXISTS trg_campanas_updates ON campanas;
+CREATE TRIGGER trg_campanas_updates
+BEFORE UPDATE ON campanas.campaign_updates
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE campanas.comentarios (
+  comment_id         BIGSERIAL PRIMARY KEY,
+  campaign_id        BIGINT NOT NULL REFERENCES campanas.campanas(campaign_id) ON DELETE CASCADE,
+  autor_id           BIGINT NOT NULL REFERENCES usuarios.usuarios(user_id),
+  texto              TEXT NOT NULL,
+  moderation_status  VARCHAR(20) NOT NULL DEFAULT 'visible',
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ,
+  id_version         INT DEFAULT 1
+
+  CONSTRAINT comentarios_ck_moderation
+    CHECK (moderation_status IN ('visible','oculto'))
+);
+
+CREATE INDEX comentarios_campaign_idx ON campanas.comentarios (campaign_id);
+CREATE INDEX comentarios_autor_idx ON campanas_comentarios.comentarios (autor_id);
+
+
+DROP TRIGGER IF EXISTS trg_campanas_comentarios ON campanas;
+CREATE TRIGGER trg_campanas_comentarios
+BEFORE UPDATE ON campanas.campanas_comentarios
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+-- =========================
+-- REPORTES (polimórfico)
+-- =========================
+CREATE TABLE revision.reportes (
+  report_id     BIGSERIAL PRIMARY KEY,
+  target_tipo   VARCHAR(20) NOT NULL,  -- campana|comentario|usuario
+  target_id     BIGINT NOT NULL,
+  reporter_id   BIGINT NOT NULL REFERENCES usuarios(user_id),
+  motivo        VARCHAR(160),
+  estado        VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+  resuelto_por  BIGINT REFERENCES usuarios(user_id),
+  resuelto_at   TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT reportes_ck_target_tipo
+    CHECK (target_tipo IN ('campana','comentario','usuario')),
+  CONSTRAINT reportes_ck_estado
+    CHECK (estado IN ('pendiente','en_revision','resuelto','descartado'))
+);
+
+CREATE INDEX reportes_target_idx ON reportes (target_tipo, target_id);
+
+-- =========================
+-- REWARD TIERS
+-- =========================
+CREATE TABLE reward_tiers (
+  reward_tier_id  BIGSERIAL PRIMARY KEY,
+  campaign_id     BIGINT NOT NULL REFERENCES campanas(campaign_id) ON DELETE CASCADE,
+  titulo          VARCHAR(120) NOT NULL,
+  descripcion     TEXT,
+  monto_minimo    NUMERIC(18,2) NOT NULL CHECK (monto_minimo > 0),
+  stock_total     INT,
+  stock_reservado INT NOT NULL DEFAULT 0,
+  fecha_entrega_estimada DATE,
+  costo_envio     NUMERIC(18,2),
+
+  CONSTRAINT reward_tiers_ck_stock
+    CHECK (stock_total IS NULL OR stock_total >= 0),
+  CONSTRAINT reward_tiers_ck_reservado
+    CHECK (stock_reservado >= 0 AND (stock_total IS NULL OR stock_reservado <= stock_total))
+);
+
+CREATE INDEX reward_tiers_campaign_idx ON reward_tiers (campaign_id);
+
+-- =========================
+-- PLEDGES
+-- =========================
+CREATE TABLE pledges (
+  pledge_id      BIGSERIAL PRIMARY KEY,
+  campaign_id    BIGINT NOT NULL REFERENCES campanas(campaign_id),
+  donante_id     BIGINT NOT NULL REFERENCES usuarios(user_id),
+  reward_tier_id BIGINT REFERENCES reward_tiers(reward_tier_id),
+  monto          NUMERIC(18,2) NOT NULL CHECK (monto > 0),
+  moneda         VARCHAR(3) NOT NULL,
+  anonima        BOOLEAN DEFAULT FALSE,
+  mensaje        VARCHAR(300),
+  estado         VARCHAR(20) NOT NULL DEFAULT 'iniciada', -- iniciada|pagada|fallida|reembolsada|cancelada
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT pledges_ck_estado
+    CHECK (estado IN ('iniciada','pagada','fallida','reembolsada','cancelada'))
+);
+
+CREATE INDEX pledges_campaign_idx ON pledges (campaign_id);
+CREATE INDEX pledges_donante_idx ON pledges (donante_id);
+CREATE INDEX pledges_estado_idx ON pledges (estado);
+
+-- =========================
+-- PAGOS
+-- =========================
+CREATE TABLE pagos (
+  payment_id     BIGSERIAL PRIMARY KEY,
+  pledge_id      BIGINT NOT NULL UNIQUE REFERENCES pledges(pledge_id) ON DELETE CASCADE,
+  metodo_pago    VARCHAR(40) NOT NULL, -- tarjeta|transferencia|wallet|...
+  estado         VARCHAR(20) NOT NULL, -- autorizado|capturado|fallido|reembolsado|chargeback
+  monto_bruto    NUMERIC(18,2) NOT NULL,
+  tarifa_plat    NUMERIC(18,2) NOT NULL DEFAULT 0,
+  tarifa_gateway NUMERIC(18,2) NOT NULL DEFAULT 0,
+  monto_neto     NUMERIC(18,2) GENERATED ALWAYS AS (monto_bruto - tarifa_plat - tarifa_gateway) STORED,
+  moneda         VARCHAR(3) NOT NULL,
+  autorizado_at  TIMESTAMPTZ,
+  capturado_at   TIMESTAMPTZ,
+  reembolsado_at TIMESTAMPTZ,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT pagos_ck_estado
+    CHECK (estado IN ('autorizado','capturado','fallido','reembolsado','chargeback')),
+  CONSTRAINT pagos_ck_neto_no_negativo
+    CHECK (monto_neto >= 0)
+);
+
+DROP TRIGGER IF EXISTS trg_pagos_updated_at ON pagos;
+CREATE TRIGGER trg_pagos_updated_at
+BEFORE UPDATE ON pagos
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE INDEX pagos_estado_idx ON pagos (estado);
+CREATE INDEX pagos_autorizado_idx ON pagos (autorizado_at);
+CREATE INDEX pagos_capturado_idx ON pagos (capturado_at);
+
+-- =========================
+-- PAYOUT BATCHES
+-- =========================
+CREATE TABLE payout_batches (
+  batch_id    BIGSERIAL PRIMARY KEY,
+  moneda      VARCHAR(3) NOT NULL,
+  estado      VARCHAR(20) NOT NULL DEFAULT 'abierto', -- abierto|enviado|cerrado
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  closed_at   TIMESTAMPTZ,
+
+  CONSTRAINT payout_batches_ck_estado
+    CHECK (estado IN ('abierto','enviado','cerrado'))
+);
+
+-- =========================
+-- DESEMBOLSOS
+-- =========================
+CREATE TABLE desembolsos (
+  payout_id        BIGSERIAL PRIMARY KEY,
+  campaign_id      BIGINT NOT NULL REFERENCES campanas(campaign_id),
+  beneficiario_id  BIGINT NOT NULL REFERENCES usuarios(user_id),
+  bank_account_id  BIGINT NOT NULL REFERENCES cuentas_bancarias(bank_account_id),
+  batch_id         BIGINT REFERENCES payout_batches(batch_id),
+  monto_bruto      NUMERIC(18,2) NOT NULL CHECK (monto_bruto > 0),
+  tarifa_transferencia NUMERIC(18,2) NOT NULL DEFAULT 0,
+  monto_neto       NUMERIC(18,2) GENERATED ALWAYS AS (monto_bruto - tarifa_transferencia) STORED,
+  moneda           VARCHAR(3) NOT NULL,
+  estado           VARCHAR(20) NOT NULL DEFAULT 'pendiente', -- pendiente|procesando|pagado|fallido
+  programado_at    TIMESTAMPTZ,
+  pagado_at        TIMESTAMPTZ,
+
+  CONSTRAINT desembolsos_ck_estado
+    CHECK (estado IN ('pendiente','procesando','pagado','fallido'))
+);
+
+CREATE INDEX desembolsos_batch_idx ON desembolsos (batch_id);
+CREATE INDEX desembolsos_campaign_idx ON desembolsos (campaign_id);
+CREATE INDEX desembolsos_benef_idx ON desembolsos (beneficiario_id);
+
+-- =========================
+-- LEDGER (DOBLE PARTIDA)
+-- =========================
+CREATE TABLE ledger_entries (
+  entry_id         BIGSERIAL PRIMARY KEY,
+  fecha            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  cuenta_debito    VARCHAR(60) NOT NULL,
+  cuenta_credito   VARCHAR(60) NOT NULL,
+  monto            NUMERIC(18,2) NOT NULL CHECK (monto > 0),
+  moneda           VARCHAR(3) NOT NULL,
+  referencia_tipo  VARCHAR(40) NOT NULL,  -- Payment|Payout|Refund|Fee...
+  referencia_id    BIGINT NOT NULL,
+  CHECK (cuenta_debito <> cuenta_credito)
+);
+
+-- =========================
+-- APP SUPERUSERS
+-- =========================
+CREATE TABLE app_superusers (
+  user_id     BIGINT PRIMARY KEY
+              REFERENCES usuarios(user_id) ON DELETE CASCADE,
+
+  granted_by  BIGINT
+              REFERENCES usuarios(user_id) ON DELETE SET NULL,
+
+  -- Corregido: tipo/DEFAULT
+  granted_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  -- Ventana temporal opcional (NULL = sin caducidad)
+  expires_at  TIMESTAMPTZ,
+
+  -- Estado de revocación (permite historizar sin borrar)
+  is_revoked  BOOLEAN NOT NULL DEFAULT FALSE,
+  revoked_by  BIGINT
+              REFERENCES usuarios(user_id) ON DELETE SET NULL,
+  -- Corregido: tipo (y sin default automático)
+  revoked_at  TIMESTAMPTZ,
+  revoke_reason  VARCHAR(50),
+
+  -- Motivo/alcance informativo (texto libre)
+  reason      VARCHAR(50),
+
+  -- Consistencia temporal y de revocación
+  CONSTRAINT app_superusers_ck_expires_after_granted
+    CHECK (expires_at IS NULL OR expires_at > granted_at),
+
+  CONSTRAINT app_superusers_ck_revocation_fields
+    CHECK (
+      (is_revoked = FALSE AND revoked_by IS NULL AND revoked_at IS NULL AND revoke_reason IS NULL)
+      OR
+      (is_revoked = TRUE  AND revoked_at IS NOT NULL)
+    )
+);
+
+CREATE INDEX app_superusers_idx_vigencia
+  ON app_superusers (is_revoked, expires_at);
