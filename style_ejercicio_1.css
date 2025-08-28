@@ -1,0 +1,36 @@
+
+
+body{
+    background-color: rgba(0, 0, 0, 0.614);
+}
+
+h1{
+    width: 50vw;
+    font-size: 3rem;
+    margin-bottom: 2rem;
+}
+
+.p_basic{
+    margin: 1.5em 0em 1.5em 0em;
+    text-align: justify
+}
+
+.images{
+    display: block;
+    margin-block: 1.5em;
+    block-size: auto;
+    inline-size: 50vw;
+    margin-inline: auto; 
+}
+
+#p_3{
+    font-style: italic;   
+    color:rgba(0, 0, 0, 0.614)
+}
+
+#general_section{
+    width: 50vw;
+    background-color: white;
+    padding: 2.95em;
+    margin-inline: auto; 
+}   
