@@ -7,7 +7,9 @@ CREATE TABLE archivos (
   mime_type     VARCHAR(100),
   size_in_bytes BIGINT,
   estado        VARCHAR(20) NOT NULL DEFAULT 'activo', 
-  created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  id_version    INT DEFAULT 1,
   CONSTRAINT chk_tipo
     CHECK (tipo in ('doc_campana', 'portada', 'imagen', 'video')),
   CONSTRAINT chk_estado
@@ -31,7 +33,7 @@ CREATE TABLE usuarios.usuarios (
   ultimo_login_at      TIMESTAMPTZ,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
-  id_version           INT default 1
+  id_version           INT NOT NULL DEFAULT 1
 );
 
 -- Trigger para mantener updated_at
@@ -60,7 +62,10 @@ CREATE TABLE usuarios.cuentas_bancarias (
   moneda            VARCHAR(3) NOT NULL,      
   created_at        TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMP NOT NULL DEFAULT NOW(),
-  id_version        int default 1
+  id_version        INT NOT NULL DEFAULT 1,
+  register_status        TEXT NOT NULL DEFAULT 'activo',  
+  CONSTRAINT cb_ck_register_status 
+    CHECK (register_status IN ('activo','inactivo'))
 );
 
 DROP TRIGGER IF EXISTS trg_usuarios_cuentas_bancarias ON usuarios;
@@ -105,10 +110,15 @@ CREATE TABLE usuarios.beneficial_owners (
     CHECK (porcentaje_participacion > 0 AND porcentaje_participacion <= 100),
 
   tipo_control              VARCHAR(20) NOT NULL,
-
+  updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  id_version             INT default 1,
+  register_status        TEXT NOT NULL DEFAULT 'activo',
+  
   CONSTRAINT uq_bo_empresa_persona UNIQUE (empresa_id, persona_id),
   CONSTRAINT bo_ck_tipo_control
-    CHECK (tipo_control IN ('directo','indirecto','rep_legal'))
+    CHECK (tipo_control IN ('directo','indirecto','rep_legal')),
+  CONSTRAINT bo_ck_register_status 
+    CHECK (register_status IN ('activo','inactivo'))
 );
 
 -- =========================
@@ -139,25 +149,32 @@ CREATE TABLE campanas.campanas (
   created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   published_at           TIMESTAMPTZ,
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
-  id_version             INT default 1,
+  id_version             INT NULL DEFAULT 1,
 
   CONSTRAINT campanas_ck_metodo_financiamiento
     CHECK (metodo_financiamiento IN ('all_or_nothing','flexible')),
   CONSTRAINT campanas_ck_tipo_campana
     CHECK (tipo_campana IN ('donacion','recompensa','prestamo','equity')),
   CONSTRAINT campanas_ck_estado
-    CHECK (estado IN ('borrador','en_revision','aprobada','rechazada','publicada','pausada','finalizada','cancelada'))
+    CHECK (estado IN ('borrador','en_revision','aprobada','rechazada','publicada','pausada','finalizada','cancelada','eliminada'))
 );
+
+DROP TRIGGER IF EXISTS trg_campanas ON campanas;
+CREATE TRIGGER trg_campanas
+BEFORE UPDATE ON campanas.campanas
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE campanas.camapanas_x_archivos(
     campaign_id BIGINT REFERENCES campanas.campanas(campaign_id),
     file_id     BIGINT REFERENCES archivos(file_id),
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    id_version             INT NOT NULL default 1,
     CONSTRAINT pk_campanas_x_archivos PRIMARY KEY (campaign_id, file_id)
 );
 
-DROP TRIGGER IF EXISTS trg_campanas_updated_at ON campanas;
-CREATE TRIGGER trg_campanas_updated_at
-BEFORE UPDATE ON campanas.campanas
+DROP TRIGGER IF EXISTS trg_campanas_x_archivos ON campanas;
+CREATE TRIGGER trg_campanas_x_archivos
+BEFORE UPDATE ON campanas.campaign_updates
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- Índices útiles (no cambian columnas)
@@ -197,7 +214,7 @@ CREATE TABLE campanas.campaign_updates (
   autor_id           BIGINT NOT NULL REFERENCES usuarios.usuarios(user_id),
   contenido          TEXT NOT NULL,
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at         TIMESTAMPTZ,
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),,
   id_version         INT DEFAULT 1
 );
 
@@ -216,11 +233,11 @@ CREATE TABLE campanas.comentarios (
   texto              TEXT NOT NULL,
   moderation_status  VARCHAR(20) NOT NULL DEFAULT 'visible',
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at         TIMESTAMPTZ,
+  updated_at         TIMESTAMPTZ NOT NUTLL DEFAULT now(),
   id_version         INT DEFAULT 1
 
   CONSTRAINT comentarios_ck_moderation
-    CHECK (moderation_status IN ('visible','oculto'))
+    CHECK (moderation_status IN ('visible','oculto','eliminado'))
 );
 
 CREATE INDEX comentarios_campaign_idx ON campanas.comentarios (campaign_id);
@@ -252,6 +269,7 @@ CREATE TABLE revision.reportes (
   resuelto_por  BIGINT REFERENCES usuarios(user_id),
   resuelto_at   TIMESTAMPTZ,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  
 
   CONSTRAINT reportes_ck_target_tipo
     CHECK (target_tipo IN ('campana','comentario','usuario')),
@@ -436,4 +454,5 @@ CREATE TABLE app_superusers (
 
 CREATE INDEX app_superusers_idx_vigencia
   ON app_superusers (is_revoked, expires_at);
+
 
