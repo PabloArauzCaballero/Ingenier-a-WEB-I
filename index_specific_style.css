@@ -8,9 +8,10 @@
 #img-redonda {
   width: 150px  !important;       
   height: 150px !important;      
-  object-fit: cover;  
-  border-radius: 50%; 
+  object-fit: cover !important;  
+  border-radius: 50% !important; 
 }
+
 
 
 
