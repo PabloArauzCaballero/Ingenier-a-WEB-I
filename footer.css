@@ -1,0 +1,81 @@
+footer{
+    width: 100%;
+    margin-top: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    background-color: #4d81ba;
+}
+
+.footer_info{
+    font-size: x-small;
+    color: white;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.footer_contenedor{
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+}
+
+
+#links_contacto{
+    display: flex;
+    list-style: none;
+}
+
+
+#links_contacto li {
+    list-style: none; 
+    margin: 0 1rem;
+    position: relative;
+    padding-left: 24px; 
+}
+
+#links_contacto li::before{
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;  
+    height: 16px;
+    background-size: contain;
+    background-repeat: no-repeat;
+
+}
+
+#links_contacto li:first-child::before{
+    background-image: url("https://PabloArauzCaballero.github.io/Ingenier-a-WEB-I/phone-call.png");
+}
+
+#links_contacto li:nth-child(2)::before{
+    background-image: url("https://PabloArauzCaballero.github.io/Ingenier-a-WEB-I/email.png");
+}
+
+#links_contacto li:nth-child(3)::before{
+    background-image: url("https://PabloArauzCaballero.github.io/Ingenier-a-WEB-I/logotipo-de-linkedin.png");
+}
+
+
+#links_contacto li{
+    margin: 0.5rem 2rem 0.5rem 2rem;
+}
+
+
+#links_contacto a:link{
+    color: white;
+}
+
+#links_contacto a:hover{
+    color: #e0dede;
+}
+
+#links_contacto a:visited{
+    color:#04266edd;
+}
+

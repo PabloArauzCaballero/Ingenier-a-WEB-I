@@ -1,0 +1,36 @@
+header {
+    margin-bottom: 2rem;    
+}
+
+header > p{
+    text-align: center;
+    margin-top: 0;
+}
+
+#title strong{
+    color:#4d81ba;
+}
+
+#container_global > article {
+    display: flex;
+    justify-content: center;
+}
+
+#container_global > article > p{
+    text-align: center;
+    font-style: italic;
+    padding-left: 2.5rem;
+    padding-right: 2.5rem;
+}
+
+#title strong{
+    font-weight: bold;
+}
+
+#title{
+    color : #8b8b8b;
+    text-transform: capitalize;
+    font-weight: 500;
+    text-align:  center;
+    margin-bottom: 0;
+}

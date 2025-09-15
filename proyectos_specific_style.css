@@ -1,0 +1,37 @@
+.card_body{
+    margin-bottom: 0.55rem;
+    display: flex;
+    flex-direction: row;
+}
+.card_image{
+    max-width: 35%;
+    height: auto;
+    display: block;
+    margin-left: 1.25rem;
+    margin-right: 1.25rem;
+}
+
+.card_btn{
+    margin:0.5rem;
+    padding: 0.5rem;
+    margin-left: 0;
+    border-radius: 0.75rem;
+    font-style: normal;
+    text-decoration: none;
+}
+
+.card_btn:link, .card_btn:visited{
+    color: white;
+    background-color: #4d81ba;
+}
+
+.card_btn:hover{
+    color: white;
+    background-color: #8b8b8b;;
+}
+
+
+.card{
+    margin-bottom: 2rem;
+}
+

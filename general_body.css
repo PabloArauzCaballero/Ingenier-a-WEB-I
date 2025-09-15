@@ -1,0 +1,107 @@
+*{
+    font-family: "Roboto", sans-serif;
+    box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body{
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: transparent;
+    position: relative;    
+}
+
+body::before{
+  content: "";
+  position: fixed;  
+  inset: 0;
+  z-index: -1;      
+  background: linear-gradient(to top, white, #4d81ba);
+}
+
+#container_global{
+    background-color: white;
+    width: 70%;
+    padding: 2rem;
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+}
+
+.subtitulos_lvl_2, .subtitulos_lvl_3, .subtitulos_lvl_4, .parrafo_especial{
+    margin-bottom: 0;
+    margin-top:0 ;
+}
+
+main > article > p{
+    margin-left: 1.25rem;
+    margin-right: 1.25rem;
+    margin-top: 2.5rem;
+    margin-bottom: 2.5rem;
+    text-align: center;
+    font-style: italic;
+}
+
+.subtitulos_lvl_2 {
+    font-size: 1.25rem;    
+}
+
+.subtitulos_lvl_3, .subtitulos_lvl_4 {
+    font-size: 0.95rem;
+}
+
+.subtitulos_lvl_4{
+    font-style: italic;
+    font-weight: normal;
+}
+
+.parrafos_normales, .listas_normales li{
+    text-align: justify;
+}
+
+.listas_normales{
+    margin: 0.05rem;
+    padding-left: 1.15rem;
+    list-style-type: circle outside none;
+}
+
+.listas_normales li::marker, a:link, .subtitulos_lvl_2, main > article > p{
+    color:#4d81ba;
+}
+
+a:hover{
+    color:#8b8b8b;
+}
+
+a:visited{
+    color: purple;
+}
+
+.card_body{
+    margin-bottom: 0.55rem;
+}
+
+
+section{
+    margin-bottom: 2.5rem;
+}
+
+hr{
+    border: none;
+    border-top:0.5px solid #4d81ba;  
+}
+
+span{
+    font-weight: normal;
+}
+
