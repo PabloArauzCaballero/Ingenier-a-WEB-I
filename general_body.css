@@ -51,6 +51,12 @@ main > article > p{
     text-align: center;
     font-style: italic;
 }
+.img-redonda {
+  width: 15%;       
+  height: auto;      
+  object-fit: cover;  
+  border-radius: 50%; 
+}
 
 .subtitulos_lvl_2 {
     font-size: 1.25rem;    
