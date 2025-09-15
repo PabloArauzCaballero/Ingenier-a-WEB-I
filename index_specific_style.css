@@ -6,11 +6,12 @@
     margin-bottom: 0;
 }
 #img-redonda {
-  width: 150px  !important;       
-  height: 150px !important;      
+  width: 50px  !important;       
+  height: 50px !important;      
   object-fit: cover !important;  
   border-radius: 50% !important; 
 }
+
 
 
 
