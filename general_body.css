@@ -52,8 +52,8 @@ main > article > p{
     font-style: italic;
 }
 .img-redonda {
-  width: 5%;       
-  height: auto;      
+  width: 150;       
+  height: 150;      
   object-fit: cover;  
   border-radius: 50%; 
 }
@@ -110,5 +110,6 @@ hr{
 span{
     font-weight: normal;
 }
+
 
 
